@@ -1,0 +1,218 @@
+close all
+clc;
+
+figure();
+ax = axes();
+
+t = linspace(0,2*pi,40);
+x = 40 * cos(t);
+y = 40 * max(0, sin(t)) - 150;
+
+for i = 1:40
+    
+    plot3(0,0,0,"ro");
+    plot_leg_3D(full_inverse(x(i),40,y(i)));
+    ax.View = [25, 25];
+    pause(0.1);
+
+end
+
+function plot_leg_2D(angles)
+%   angles is a vector of 5 angles of the leg limb
+%   this function performs forward kinematics and plots the results in 3D
+%   we will assume that the first servo has a rotational axis colinear with
+%   the x-axis
+
+% angles offset such that legs are at maximum extension downwards when
+% standing straight.
+angles(2) = angles(2) + 0.3788;
+angles(3) = angles(3) - 0.7382;
+
+x_start = 0;
+y_start = -45.8;
+
+%   second servo rotate
+[x_k, y_k, x_b, y_b] = femur_rotate(x_start, y_start, angles(2));
+% third servo rotate
+[x_a, y_a] = tibia_rotate(x_k, y_k, angles(3), angles(2));
+
+[x_foot, y_foot] = ankle_rotate(x_a, y_a, angles(4), angles(3), angles(2));
+
+hold on;
+plot([0,x_start],[0,y_start]);
+
+plot([0,x_b], [y_start,y_b]);
+
+plot([x_b, x_k], [y_b, y_k]);
+
+plot([x_k, x_a], [y_k, y_a]);
+
+plot([x_a, x_foot], [y_a, y_foot]);
+hold off;
+
+xlabel("x");
+ylabel("y");
+legend("hip","top", "bottom", "tibia", "ankle");
+
+axis equal;
+
+end
+
+function [x_f, y_f, z_f] = plot_leg_3D(angles)
+%   angles is a vector of 5 angles of the leg limb
+%   this function performs forward kinematics and plots the results in 3D
+%   we will assume that the first servo has a rotational axis colinear with
+%   the x-axis
+
+% angles offset such that legs are at maximum extension downwards when
+% standing straight.
+angles(2) = angles(2) + 0.3788;
+angles(3) = angles(3) - 0.7382;
+
+x_start = 0;
+y_start = -45.8;
+
+%   second servo rotate
+[x_k, y_k, x_b, y_b] = femur_rotate(x_start, y_start, angles(2));
+% third servo rotate
+[x_a, y_a] = tibia_rotate(x_k, y_k, angles(3), angles(2));
+% forth servo rotate (ankle forward rotation)
+[x_foot, y_foot] = ankle_rotate(x_a, y_a, angles(4), angles(3), angles(2));
+
+% convert 2D coordinates into 3D through hip rotation
+[x_h, y_h, z_h] = hip_rotate(x_start, y_start, angles(1));   % hip
+[x_b, y_b, z_b] = hip_rotate(x_b,     y_b,     angles(1));   % bend point
+[x_k, y_k, z_k] = hip_rotate(x_k,     y_k,     angles(1));   % knee
+[x_a, y_a, z_a] = hip_rotate(x_a,     y_a,     angles(1));   % ankle
+[x_f, y_f, z_f] = hip_rotate(x_foot,  y_foot,  angles(1));   % foot
+
+hold on;
+plot3([0,   x_h], [0,   y_h], [0,   z_h], "o-", "LineWidth", 1);
+plot3([x_h, x_b], [y_h, y_b], [z_h, z_b], "o-",  "LineWidth", 1);
+plot3([x_b, x_k], [y_b, y_k], [z_b, z_k], "o-",  "LineWidth", 1);
+plot3([x_k, x_a], [y_k, y_a], [z_k, z_a], "o-",  "LineWidth", 1)
+plot3([x_a, x_f], [y_a, y_f], [z_a, z_f], "ok-",  "LineWidth", 1);
+
+% plot floor
+x_p = [-1 -1 ;1 1] * 200;
+y_p = [-1 1 ;-1 1] * 200;
+z_p = -210 * ones(2,2);
+
+surf(x_p, y_p, z_p);
+hold off;
+
+xlabel("x");
+ylabel("y");
+legend("hip","femur top", "femur bottom", "tibia", "ankle");
+
+axis equal;
+
+end
+
+function [x, y, x_bend, y_bend] = femur_rotate(x_0, y_0, angle)
+%   calculates the rotation of the femur
+%   hip angle increases as knee moves forward
+
+    y_bend = y_0 - 44.4 * cos(angle);
+    x_bend = x_0 + 44.4 * sin(angle);
+
+    y = y_0 - 44.4 * cos(angle) - 24.4 * cos(1.117 - angle);
+    x = x_0 + 44.4 * sin(angle) - 24.4 * sin(1.117 - angle);
+
+end
+
+function [x,y] = tibia_rotate(x_0, y_0, angle_f, angle_k)
+%   calculates the rotation of the tibia, including the rotation of the
+%   knee angle increases as ankle moves backwards
+
+    x_offset = -59.8 * sin(angle_f - angle_k + 1.117);
+    y_offset = -59.8 * cos(angle_f - angle_k + 1.117);
+
+    x = x_0 + x_offset;
+    y = y_0 + y_offset;
+
+end
+
+function [x,y] = ankle_rotate(x_0, y_0, angle_a, angle_k, angle_f)
+%   calculate the position of the bottom of the ankle, including rotation
+%   of the femur, tibia, and ankle
+%   angle increases as the toes rotate downwards
+
+    x = x_0 - 45.8 * sin(angle_a + angle_k - angle_f + 1.117);
+    y = y_0 - 45.8 * cos(angle_a + angle_k - angle_f + 1.117);
+
+end
+
+function [x, y, z] = hip_rotate(x_0, y_0, angle_h)
+%   rotate the given point about the hip (0,0)
+    x = x_0;
+    y = y_0 * sin(angle_h);
+    z = y_0 * cos(angle_h);
+
+end
+
+function angles = set_ft_dist(height)
+%   Inverse kinematics to set distance of femur-tibia system.
+    angles = zeros(5,1);
+
+    angles(3) = acos((height^2 - 59.8^2 - 59.3^2) / 2 / 59.8 / 59.3);
+
+    angles(2) = atan(59.8 * sin(angles(3)) / (59.8 * cos(angles(3)) + 59.3));
+
+    angles(4) = angles(2) - angles(3);
+
+end
+
+function angles = full_inverse(x,y,z)
+%   takes in x y z position of foot and returns angles of motors
+
+%   net rotation around the x-axis is 0.
+    angle_h = atan(y/z);
+
+%   calculate position of ankle. Foot rotation does not change x position
+%   of ankle
+    y_a = y - 45.8 * sin(angle_h);
+    z_a = z + 45.8 * cos(angle_h);
+
+%   similarly, calculate bottom of hip position. hip rotation also does not
+%   change x position of hip bottom
+    y_h = 45.8 * sin(angle_h);
+    z_h = - 45.8 * cos(angle_h);
+
+    ft_dist = sqrt(x^2 + (y_a - y_h)^2 + (z_a - z_h)^2);
+
+    angles = set_ft_dist(ft_dist);
+
+    angles(1) = angle_h;
+    angles(5) = -angle_h;
+
+    angle_ft = asin(x/ft_dist);
+
+    angles(2) = angles(2) + angle_ft;
+    angles(4) = angles(4) + angle_ft;
+
+end
+
+function r_values = angles2values(angles)
+
+    angles(2) = angles(2) + 0.3788;
+    angles(3) = angles(3) - 0.7382;
+
+    r_values = ones(5,2) * 500;
+
+    angles = angles / pi * 180 / 0.237;
+
+%   left leg values
+    r_values(1,2) = 500;
+    r_values(2,2) = 500 + angles(2);
+    r_values(3,2) = 500 + angles(3);
+    r_values(4,2) = 500 + angles(4);
+    r_values(5,2) = 500;
+    
+%   right leg values
+    r_values(1,1) = 500;
+    r_values(2,1) = 500 - angles(2);
+    r_values(3,1) = 500 - angles(3);
+    r_values(4,1) = 500 - angles(4);
+    r_values(5,1) = 500;
+end
